@@ -87,6 +87,7 @@ class RoutingAgent:
         self.remote_agent_connections: dict[str, RemoteAgentConnections] = {}
         self.cards: dict[str, AgentCard] = {}
         self.agents: str = ''
+        print("INIT CALLED")
 
     async def _async_init_components(
         self, remote_agent_addresses: list[str]
@@ -108,6 +109,8 @@ class RoutingAgent:
                     )
                     self.remote_agent_connections[card.name] = remote_connection
                     self.cards[card.name] = card
+                    print("CONN URL", address)
+                    print(card)
                 except httpx.ConnectError as e:
                     logger.debug(
                         'ERROR: Failed to get agent card from %s: %s',
@@ -163,6 +166,7 @@ class RoutingAgent:
         **Core Directives:**
 
         * **Task Delegation:** Utilize the `send_message` function to assign actionable tasks to remote agents.
+        * **Task Delegation:** Analyze the agent card properly and prepare the `task` dict to be sent to `send_message` tool.
         * **Contextual Awareness for Remote Agents:** If a remote agent repeatedly requests user confirmation, assume it lacks access to the         full conversation history. In such cases, enrich the task description with all necessary contextual information relevant to that         specific agent.
         * **Autonomous Agent Engagement:** Never seek user permission before engaging with remote agents. If multiple agents are required to         fulfill a request, connect with them directly without requesting user preference or confirmation.
         * **Transparent Communication:** Always present the complete and detailed response from the remote agent to the user.
@@ -170,8 +174,6 @@ class RoutingAgent:
         * **Focused Information Sharing:** Provide remote agents with only relevant contextual information. Avoid extraneous details.
         * **No Redundant Confirmations:** Do not ask remote agents for confirmation of information or actions.
         * **Tool Reliance:** Strictly rely on available tools to address user requests. Do not generate responses based on assumptions. If         information is insufficient, request clarification from the user.
-        * **Prioritize Recent Interaction:** Focus primarily on the most recent parts of the conversation when processing requests.
-        * **Active Agent Prioritization:** If an active agent is already engaged, route subsequent related requests to that agent using the         appropriate task update tool.
 
         **Agent Roster:**
 
@@ -220,7 +222,7 @@ class RoutingAgent:
     async def send_message(
         self,
         agent_name: str,
-        task: str,
+        task: dict,
         tool_context: ToolContext,
     ):
         """Sends a task to remote seller agent.
@@ -229,8 +231,7 @@ class RoutingAgent:
 
         Args:
             agent_name: The name of the agent to send the task to.
-            task: The comprehensive conversation context summary
-                and goal to be achieved regarding user inquiry and purchase request.
+            task: The input request body to be sent to the agent.
             tool_context: The tool context this method runs in.
 
         Yields:
@@ -264,7 +265,7 @@ class RoutingAgent:
             'message': {
                 'role': 'user',
                 'parts': [
-                    {'type': 'text', 'text': task}
+                    {'type': 'data', 'data': task}
                 ],  # Use the 'task' argument here
                 'messageId': message_id,
             },
@@ -306,8 +307,7 @@ def _get_initialized_routing_agent_sync() -> Agent:
     async def _async_main() -> Agent:
         routing_agent_instance = await RoutingAgent.create(
             remote_agent_addresses=[
-                os.getenv('AIR_AGENT_URL', 'http://localhost:10002'),
-                os.getenv('WEA_AGENT_URL', 'http://localhost:10001'),
+                'http://localhost:8080/681b1ddff3ac9a39a3c8d1c0',
             ]
         )
         return routing_agent_instance.create_agent()

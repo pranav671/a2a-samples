@@ -23,7 +23,6 @@ from host_agent_executor import (
 from routing_agent import (
     root_agent,
 )
-from traceability_ext import TraceabilityExtension
 
 
 load_dotenv()
@@ -55,12 +54,8 @@ def main(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
 
     app_url = os.environ.get('APP_URL', f'http://{host}:{port}')
 
-    traceability_ext = TraceabilityExtension()
     capabilities = AgentCapabilities(
         streaming=True,
-        extensions=[
-            traceability_ext.agent_extension(),
-        ],
     )
 
     agent_card = AgentCard(

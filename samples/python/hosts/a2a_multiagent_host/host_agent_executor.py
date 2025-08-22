@@ -20,12 +20,6 @@ from a2a.types import (
 from a2a.utils.errors import ServerError
 from google.adk import Runner
 from google.genai import types
-from traceability_ext import (
-    TRACEABILITY_EXTENSION_URI,
-    CallTypeEnum,
-    ResponseTrace,
-    TraceStep,
-)
 
 
 if TYPE_CHECKING:
@@ -53,7 +47,7 @@ class HostAgentExecutor(AgentExecutor):
         new_message: types.Content,
         session_id: str,
         task_updater: TaskUpdater,
-        response_trace: ResponseTrace = None,
+        response_trace = None,
     ) -> None:
         session_obj = await self._upsert_session(session_id)
         # Update session_id with the ID from the resolved session object.
@@ -80,28 +74,6 @@ class HostAgentExecutor(AgentExecutor):
                         for part in event.content.parts
                         if (part.text or part.file_data or part.inline_data)
                     ]
-
-                    if response_trace:
-                        with TraceStep(
-                            response_trace,
-                            CallTypeEnum.HOST,
-                            name='host_agent',
-                            parameters={},
-                            requests='',
-                            step_type='ending',
-                        ) as ending_step:
-                            logger.debug('### Finishing call with ending step')
-                            ending_step.end_step(
-                                total_tokens=event.usage_metadata.total_token_count,
-                            )
-
-                        trace_artifact = response_trace.as_dict()
-                        logger.debug(
-                            '### Exporting trace artifact to response: %s',
-                            json.dumps(trace_artifact, indent=2),
-                        )
-
-                        parts.append(TextPart(text=json.dumps(trace_artifact)))
 
                     logger.debug('#### Yielding final response: %s', parts)
                     await task_updater.add_artifact(parts)
@@ -144,36 +116,6 @@ class HostAgentExecutor(AgentExecutor):
                                 agent_name = call.args.get('agent_name')
                                 agent_query = call.args.get('task')
 
-                    if response_trace and agent_name:
-                        with TraceStep(
-                            response_trace,
-                            CallTypeEnum.HOST,
-                            name='host_agent',
-                            parameters={},
-                            requests=agent_query,
-                            step_type='thinking',
-                        ) as thinking_step:
-                            logger.debug(
-                                '### Tracing agent call with token: %s',
-                                event.usage_metadata.total_token_count,
-                            )
-                            thinking_step.end_step(
-                                total_tokens=event.usage_metadata.total_token_count,
-                            )
-
-                        with TraceStep(
-                            response_trace,
-                            CallTypeEnum.AGENT,
-                            name=agent_name,
-                            parameters={},
-                            requests=agent_query,
-                            step_type='agent_call',
-                        ):
-                            logger.debug(
-                                '### Tracing agent call for agent: %s',
-                                agent_name,
-                            )
-
         finally:
             # Remove from active sessions when done
             self._active_sessions.discard(session_id)
@@ -182,24 +124,13 @@ class HostAgentExecutor(AgentExecutor):
         self,
         context: RequestContext,
         event_queue: EventQueue,
-        response_trace: ResponseTrace = None,
+        response_trace = None,
     ):
         logger.debug('[host_agent] execute called with context: %s', context)
         logger.debug(
             '[host_agent] execute called with context.requested_extensions: %s',
             context.requested_extensions,
         )
-
-        if TRACEABILITY_EXTENSION_URI in context.requested_extensions:
-            context.add_activated_extension(TRACEABILITY_EXTENSION_URI)
-            logger.debug(
-                '[host_agent] Activated extensions: %s',
-                TRACEABILITY_EXTENSION_URI,
-            )
-            response_trace = ResponseTrace()
-            logger.debug(
-                '[host_agent] Traceability extension activated, initializing trace.'
-            )
 
         # Run the agent until either complete or the task is suspended.
         updater = TaskUpdater(event_queue, context.task_id, context.context_id)
