@@ -68,8 +68,6 @@ class HostAgentExecutor(AgentExecutor):
                 session_id=session_id,
                 new_message=new_message,
             ):
-                if break_async_loop:
-                    break
                 logger.debug(
                     '### Event received: %s',
                     event.model_dump_json(exclude_none=True, indent=2),
@@ -97,6 +95,7 @@ class HostAgentExecutor(AgentExecutor):
                         if response.get('response', {}).get('result', {}).get('status', {}).get('state', '') == 'working':
                             while self.output is None:
                                 await asyncio.sleep(5)
+                                print("slept for 5 sec", self.output)
                             await task_updater.update_status(
                                 TaskState.completed, 
                                 message=task_updater.new_agent_message([DataPart(data=self.output)]),
@@ -105,6 +104,8 @@ class HostAgentExecutor(AgentExecutor):
                             break_async_loop = True
                         self.output = None
 
+                if break_async_loop:
+                    break
                 if not event.get_function_calls():
                     parts = [
                         convert_genai_part_to_a2a(part)

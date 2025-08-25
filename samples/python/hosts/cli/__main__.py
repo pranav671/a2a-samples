@@ -2,11 +2,14 @@ import asyncio
 import base64
 import os
 import urllib
-
+import datetime
 from uuid import uuid4
 
 import asyncclick as click
 import httpx
+from rich import print
+from rich.console import Console
+from rich.panel import Panel
 
 from a2a.client import A2ACardResolver, A2AClient
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
@@ -29,6 +32,35 @@ from a2a.types import (
     TextPart,
 )
 
+console = Console()
+
+
+def format_stream_event(event: dict) -> str:
+    kind = event.get("kind")
+    task_id = event.get("taskId", "N/A")
+    final = event.get("final", False)
+
+    if kind == "status-update":
+        state = event.get("status", {}).get("state", "unknown")
+        timestamp = event.get("status", {}).get("timestamp", "unknown")
+        timestamp_obj = datetime.datetime.fromisoformat(timestamp)
+        timestamp_str = timestamp_obj.strftime("%Y-%m-%d %H:%M:%S")
+        status_str = f"[{timestamp_str}] - Status: {state.upper()}"
+        console.print(status_str)
+        if final:
+            if event.get('status', {}).get('message'):
+                print(event.get('status', {}).get('message', {}).get('parts', [])[0].get('data', {}))
+
+    elif kind == "artifact-update":
+        artifact = event.get("artifact", {})
+        parts = artifact.get("parts", [])
+        texts = [p.get("text") for p in parts if p.get("kind") == "text" and p.get("text")]
+        text_str = " | ".join(texts) if texts else "No text provided"
+        console.print(f"Artifact update")
+        print(f"[bold blue]{text_str}[/bold blue]")
+
+    else:
+        console.print(f"Unknown event type '{kind}' for Task {task_id}")
 
 @click.command()
 @click.option('--agent', default='http://localhost:8083/a2a')
@@ -74,13 +106,18 @@ async def cli(
         ]
         if ext_list:
             headers[HTTP_EXTENSION_HEADER] = ', '.join(ext_list)
-    print(f'Will use headers: {headers}')
+    console.print(f'[bold cyan]Using headers:[/] {headers}')
     async with httpx.AsyncClient(timeout=30, headers=headers) as httpx_client:
         card_resolver = A2ACardResolver(httpx_client, agent)
         card = await card_resolver.get_agent_card()
 
-        print('======= Agent Card ========')
-        print(card.model_dump_json(exclude_none=True))
+        console.print(Panel(
+            'Agent Card',
+            style='bold blue',
+            border_style='blue',
+            expand=False
+        ))
+        console.print_json(card.model_dump_json(exclude_none=True))
 
         notif_receiver_parsed = urllib.parse.urlparse(
             push_notification_receiver
@@ -106,7 +143,7 @@ async def cli(
         context_id = session if session > 0 else uuid4().hex
 
         while continue_loop:
-            print('=========  starting a new task ======== ')
+            console.print('\n' + '='*20 + ' Starting a new task ' + '='*20, style='bold green')
             continue_loop, _, task_id = await completeTask(
                 client,
                 streaming,
@@ -118,11 +155,11 @@ async def cli(
             )
 
             if history and continue_loop:
-                print('========= history ======== ')
+                console.print('\n' + '='*20 + ' Task History ' + '='*20, style='bold yellow')
                 task_response = await client.get_task(
                     {'id': task_id, 'historyLength': 10}
                 )
-                print(
+                console.print_json(
                     task_response.model_dump_json(
                         include={'result': {'history': True}}
                     )
@@ -138,9 +175,9 @@ async def completeTask(
     task_id,
     context_id,
 ):
-    prompt = click.prompt(
-        '\nWhat do you want to send to the agent? (:q or quit to exit)'
-    )
+    console.print('\n[bold]Enter your message for the agent[/bold]', style='blue')
+    console.print('[dim](Type :q or quit to exit)[/dim]')
+    prompt = click.prompt('> ', default='', show_default=False)
     if prompt == ':q' or prompt == 'quit':
         return False, None, None
 
@@ -152,11 +189,9 @@ async def completeTask(
         context_id=context_id,
     )
 
-    file_path = click.prompt(
-        'Select a file path to attach? (press enter to skip)',
-        default='',
-        show_default=False,
-    )
+    console.print('\n[bold]File Attachment[/bold]', style='blue')
+    console.print('[dim](Press enter to skip file attachment)[/dim]')
+    file_path = click.prompt('File path', default='', show_default=False)
     if file_path and file_path.strip() != '':
         with open(file_path, 'rb') as f:
             file_content = base64.b64encode(f.read()).decode('utf-8')
@@ -217,7 +252,7 @@ async def completeTask(
                     task_completed = True
             elif isinstance(event, Message):
                 message = event
-            print(f'stream event => {event.model_dump_json(exclude_none=True)}')
+            format_stream_event(event.model_dump())
         # Upon completion of the stream. Retrieve the full task if one was made.
         if task_id and not task_completed:
             taskResultResponse = await client.get_task(

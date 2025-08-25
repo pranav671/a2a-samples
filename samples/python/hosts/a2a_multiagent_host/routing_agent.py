@@ -109,8 +109,6 @@ class RoutingAgent:
                     )
                     self.remote_agent_connections[card.name] = remote_connection
                     self.cards[card.name] = card
-                    print("CONN URL", address)
-                    print(card)
                 except httpx.ConnectError as e:
                     logger.debug(
                         'ERROR: Failed to get agent card from %s: %s',
@@ -150,7 +148,7 @@ class RoutingAgent:
             instruction=self.root_instruction,
             before_model_callback=self.before_model_callback,
             description=(
-                'This Routing agent orchestrates the decomposition of the user asking for weather forecast or airbnb accommodation'
+                'This Routing agent orchestrates the decomposition of the user asking for various tasks'
             ),
             tools=[
                 self.send_message,
@@ -161,7 +159,7 @@ class RoutingAgent:
         """Generate the root instruction for the RoutingAgent."""
         current_agent = self.check_active_agent(context)
         return f"""
-        **Role:** You are an expert Routing Delegator. Your primary function is to accurately delegate user inquiries regarding weather or accommodations to the appropriate specialized remote agents.
+        **Role:** You are an expert Routing Delegator. Your primary function is to accurately delegate user requests to the appropriate specialized remote agents.
 
         **Core Directives:**
 
@@ -172,8 +170,6 @@ class RoutingAgent:
         * **Transparent Communication:** Always present the complete and detailed response from the remote agent to the user.
         * **User Confirmation Relay:** If a remote agent asks for confirmation, and the user has not already provided it, relay this         confirmation request to the user.
         * **Focused Information Sharing:** Provide remote agents with only relevant contextual information. Avoid extraneous details.
-        * **No Redundant Confirmations:** Do not ask remote agents for confirmation of information or actions.
-        * **Tool Reliance:** Strictly rely on available tools to address user requests. Do not generate responses based on assumptions. If         information is insufficient, request clarification from the user.
 
         **Agent Roster:**
 
@@ -222,7 +218,7 @@ class RoutingAgent:
     async def send_message(
         self,
         agent_name: str,
-        task: dict,
+        task: str,
         tool_context: ToolContext,
     ):
         """Sends a task to remote seller agent.
@@ -279,7 +275,7 @@ class RoutingAgent:
                     }
                 }
             }
-        except json.JSONDecodeError:
+        except Exception as r:
             payload = {
                 'message': {
                     'role': 'user',
@@ -294,8 +290,6 @@ class RoutingAgent:
                     }
                 }
             }
-
-        print("MSG TO AGENT API", payload)
 
         if task_id:
             payload['message']['taskId'] = task_id

@@ -50,9 +50,9 @@ def main(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
     skill = AgentSkill(
         id='host_agent_search',
         name='Search host_agent',
-        description='Helps with weather in city, or states, and airbnb',
+        description='Delegates the tasks to remote agents',
         tags=['host_agent'],
-        examples=['weather in LA, CA, and airbnb in LA, CA'],
+        examples=['generate test cases for jira issue GETS-9847'],
     )
 
     app_url = os.environ.get('APP_URL', f'http://{host}:{port}/a2a/')
@@ -63,7 +63,7 @@ def main(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
 
     agent_card = AgentCard(
         name='Host A2A Agent',
-        description='A2A server that helps with weather and airbnb',
+        description='A2A server that delegates the tasks to remote agents',
         url=app_url,
         version='1.0.0',
         default_input_modes=['text'],
@@ -95,8 +95,8 @@ def main(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
     async def receive_notification(request: Request):
         data = await request.json()
         print("NOTIFICATIONS", data)
-        agent_executor.output = data
-        print(f"Received notification: {data}")
+        if data.get('agentStatus') == 'completed':
+            agent_executor.output = data.get('output')
         return JSONResponse({"status": "ok", "message": "Notification received"})
 
     api_app.mount('/a2a/', a2a_app.build())
