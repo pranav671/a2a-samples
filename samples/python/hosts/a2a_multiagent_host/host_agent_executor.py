@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 
@@ -9,6 +10,7 @@ from a2a.server.events.event_queue import EventQueue
 from a2a.server.tasks import TaskUpdater
 from a2a.types import (
     AgentCard,
+    DataPart,
     FilePart,
     FileWithBytes,
     FileWithUri,
@@ -39,6 +41,7 @@ class HostAgentExecutor(AgentExecutor):
     def __init__(self, runner: Runner, card: AgentCard):
         self.runner = runner
         self._card = card
+        self.output = None
         # Track active sessions for potential cancellation
         self._active_sessions: set[str] = set()
 
@@ -49,6 +52,7 @@ class HostAgentExecutor(AgentExecutor):
         task_updater: TaskUpdater,
         response_trace = None,
     ) -> None:
+        self.output = None
         session_obj = await self._upsert_session(session_id)
         # Update session_id with the ID from the resolved session object.
         # (it may be the same as the one passed in if it already exists)
@@ -57,12 +61,15 @@ class HostAgentExecutor(AgentExecutor):
         # Track this session as active
         self._active_sessions.add(session_id)
 
+        break_async_loop = False
         try:
             async for event in self.runner.run_async(
                 user_id=DEFAULT_USER_ID,
                 session_id=session_id,
                 new_message=new_message,
             ):
+                if break_async_loop:
+                    break
                 logger.debug(
                     '### Event received: %s',
                     event.model_dump_json(exclude_none=True, indent=2),
@@ -83,6 +90,21 @@ class HostAgentExecutor(AgentExecutor):
                     )
 
                     break
+                if event.get_function_responses():
+                    for response_obj in event.get_function_responses():
+                        response = response_obj.model_dump()
+                        print("RESPONSE IN HOST AGENT EXECUTOR", response)
+                        if response.get('response', {}).get('result', {}).get('status', {}).get('state', '') == 'working':
+                            while self.output is None:
+                                await asyncio.sleep(5)
+                            await task_updater.update_status(
+                                TaskState.completed, 
+                                message=task_updater.new_agent_message([DataPart(data=self.output)]),
+                                final=True,
+                            )
+                            break_async_loop = True
+                        self.output = None
+
                 if not event.get_function_calls():
                     parts = [
                         convert_genai_part_to_a2a(part)

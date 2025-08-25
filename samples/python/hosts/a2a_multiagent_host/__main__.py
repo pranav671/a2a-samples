@@ -23,6 +23,9 @@ from host_agent_executor import (
 from routing_agent import (
     root_agent,
 )
+from traceability_ext import TraceabilityExtension
+from fastapi import FastAPI, Request
+from starlette.responses import JSONResponse
 
 
 load_dotenv()
@@ -52,7 +55,7 @@ def main(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
         examples=['weather in LA, CA, and airbnb in LA, CA'],
     )
 
-    app_url = os.environ.get('APP_URL', f'http://{host}:{port}')
+    app_url = os.environ.get('APP_URL', f'http://{host}:{port}/a2a/')
 
     capabilities = AgentCapabilities(
         streaming=True,
@@ -86,8 +89,20 @@ def main(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
     a2a_app = A2AStarletteApplication(
         agent_card=agent_card, http_handler=request_handler
     )
+    api_app = FastAPI(title="Custom API")
 
-    uvicorn.run(a2a_app.build(), host=host, port=port)
+    @api_app.post("/notifications")
+    async def receive_notification(request: Request):
+        data = await request.json()
+        print("NOTIFICATIONS", data)
+        agent_executor.output = data
+        print(f"Received notification: {data}")
+        return JSONResponse({"status": "ok", "message": "Notification received"})
+
+    api_app.mount('/a2a/', a2a_app.build())
+
+    uvicorn.run(api_app, host=host, port=8083)
+    # uvicorn.run(a2a_app.build(), host=host, port=port)
 
 
 @click.command()

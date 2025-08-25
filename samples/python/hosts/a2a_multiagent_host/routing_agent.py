@@ -231,7 +231,9 @@ class RoutingAgent:
 
         Args:
             agent_name: The name of the agent to send the task to.
-            task: The input request body to be sent to the agent.
+            task: The comprehensive conversation context summary
+                and goal to be achieved regarding user inquiry and purchase request.
+                if the remote agent is expecting a data part then send stringified json.
             tool_context: The tool context this method runs in.
 
         Yields:
@@ -261,15 +263,39 @@ class RoutingAgent:
         if not message_id:
             message_id = str(uuid.uuid4())
 
-        payload = {
-            'message': {
-                'role': 'user',
-                'parts': [
-                    {'type': 'data', 'data': task}
-                ],  # Use the 'task' argument here
-                'messageId': message_id,
-            },
-        }
+        try:
+            task_dict = json.loads(task)
+            payload = {
+                'message': {
+                    'role': 'user',
+                    'parts': [
+                        {'kind': 'data', 'data': task_dict}
+                    ],
+                    'messageId': message_id,
+                },
+                "configuration": {
+                    "push_notification_config": {
+                        "url": "http://localhost:8083/notifications"
+                    }
+                }
+            }
+        except json.JSONDecodeError:
+            payload = {
+                'message': {
+                    'role': 'user',
+                    'parts': [
+                        {'kind': 'text', 'text': task}
+                    ],  # Use the 'task' argument here
+                    'messageId': message_id,
+                },
+                "configuration": {
+                    "push_notification_config": {
+                        "url": "http://localhost:8083/notifications"
+                    }
+                }
+            }
+
+        print("MSG TO AGENT API", payload)
 
         if task_id:
             payload['message']['taskId'] = task_id
@@ -307,7 +333,8 @@ def _get_initialized_routing_agent_sync() -> Agent:
     async def _async_main() -> Agent:
         routing_agent_instance = await RoutingAgent.create(
             remote_agent_addresses=[
-                'http://localhost:8080/681b1ddff3ac9a39a3c8d1c0',
+                os.getenv('AIR_AGENT_URL', 'http://localhost:8080/681b1ddff3ac9a39a3c8d1c0'),
+                # os.getenv('WEA_AGENT_URL', 'http://localhost:10001'),
             ]
         )
         return routing_agent_instance.create_agent()

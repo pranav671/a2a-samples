@@ -31,7 +31,7 @@ from a2a.types import (
 
 
 @click.command()
-@click.option('--agent', default='http://localhost:8083')
+@click.option('--agent', default='http://localhost:8083/a2a')
 @click.option(
     '--bearer-token',
     help='Bearer token for authentication.',
@@ -287,6 +287,9 @@ async def completeTask(
                 context_id,
                 task_id,
             )
+        # task is in-progress 
+        if state.name == TaskState.working.name:
+            return True, context_id, task_id
         ## task is complete
         return True, context_id, task_id
     ## Failure case, shouldn't reach
