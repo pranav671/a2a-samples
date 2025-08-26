@@ -1,5 +1,5 @@
 import asyncio
-import base64
+import json
 import os
 import urllib
 import datetime
@@ -9,7 +9,7 @@ import asyncclick as click
 import httpx
 from rich import print
 from rich.console import Console
-from rich.panel import Panel
+from rich.json import JSON
 
 from a2a.client import A2ACardResolver, A2AClient
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
@@ -49,7 +49,8 @@ def format_stream_event(event: dict) -> str:
         console.print(status_str)
         if final:
             if event.get('status', {}).get('message'):
-                print(event.get('status', {}).get('message', {}).get('parts', [])[0].get('data', {}))
+                data = event.get('status', {}).get('message', {}).get('parts', [])[0].get('data', {})
+                print(JSON.from_data(data))
 
     elif kind == "artifact-update":
         artifact = event.get("artifact", {})
@@ -111,13 +112,13 @@ async def cli(
         card_resolver = A2ACardResolver(httpx_client, agent)
         card = await card_resolver.get_agent_card()
 
-        console.print(Panel(
-            'Agent Card',
-            style='bold blue',
-            border_style='blue',
-            expand=False
-        ))
-        console.print_json(card.model_dump_json(exclude_none=True))
+        # console.print(Panel(
+        #     'Agent Card',
+        #     style='bold blue',
+        #     border_style='blue',
+        #     expand=False
+        # ))
+        # console.print_json(card.model_dump_json(exclude_none=True))
 
         notif_receiver_parsed = urllib.parse.urlparse(
             push_notification_receiver
@@ -176,6 +177,7 @@ async def completeTask(
     context_id,
 ):
     console.print('\n[bold]Enter your message for the agent[/bold]', style='blue')
+    
     console.print('[dim](Type :q or quit to exit)[/dim]')
     prompt = click.prompt('> ', default='', show_default=False)
     if prompt == ':q' or prompt == 'quit':

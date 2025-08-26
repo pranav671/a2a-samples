@@ -22,6 +22,7 @@ from a2a.types import (
 from a2a.utils.errors import ServerError
 from google.adk import Runner
 from google.genai import types
+from rich import print
 
 
 if TYPE_CHECKING:
@@ -68,10 +69,6 @@ class HostAgentExecutor(AgentExecutor):
                 session_id=session_id,
                 new_message=new_message,
             ):
-                logger.debug(
-                    '### Event received: %s',
-                    event.model_dump_json(exclude_none=True, indent=2),
-                )
 
                 if event.is_final_response():
                     parts = [
@@ -80,7 +77,6 @@ class HostAgentExecutor(AgentExecutor):
                         if (part.text or part.file_data or part.inline_data)
                     ]
 
-                    logger.debug('#### Yielding final response: %s', parts)
                     await task_updater.add_artifact(parts)
 
                     await task_updater.update_status(
@@ -92,9 +88,10 @@ class HostAgentExecutor(AgentExecutor):
                     for response_obj in event.get_function_responses():
                         response = response_obj.model_dump()
                         if response.get('response', {}).get('result', {}).get('status', {}).get('state', '') == 'working':
-                            print("Waiting for Agent to finish...")
+                            print("[green]Remote Agent execution started[/green]")
+                            print("[orange1]Waiting for Remote Agent to finish...[/orange1]")
                             while self.output is None:
-                                await asyncio.sleep(5)
+                                await asyncio.sleep(3)
                             await task_updater.update_status(
                                 TaskState.completed, 
                                 message=task_updater.new_agent_message([DataPart(data=self.output)]),
@@ -112,7 +109,6 @@ class HostAgentExecutor(AgentExecutor):
                         if (part.text or part.file_data or part.inline_data)
                     ]
 
-                    logger.debug('#### Yielding update response: %s', parts)
                     await task_updater.update_status(
                         TaskState.working,
                         message=task_updater.new_agent_message(
@@ -128,9 +124,6 @@ class HostAgentExecutor(AgentExecutor):
                         ),
                     )
                 else:
-                    logger.debug('#### Event - Function Calls')
-                    agent_name = ''
-                    agent_query = ''
                     calls = event.get_function_calls()
                     if calls:
                         for call in calls:
@@ -148,11 +141,6 @@ class HostAgentExecutor(AgentExecutor):
         event_queue: EventQueue,
         response_trace = None,
     ):
-        logger.debug('[host_agent] execute called with context: %s', context)
-        logger.debug(
-            '[host_agent] execute called with context.requested_extensions: %s',
-            context.requested_extensions,
-        )
 
         # Run the agent until either complete or the task is suspended.
         updater = TaskUpdater(event_queue, context.task_id, context.context_id)
@@ -172,7 +160,6 @@ class HostAgentExecutor(AgentExecutor):
             # traceability=traceability,
             response_trace=response_trace,
         )
-        logger.debug('[host_agent] execute exiting')
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         """Cancel the execution for the given context.
@@ -182,9 +169,6 @@ class HostAgentExecutor(AgentExecutor):
         """
         session_id = context.context_id
         if session_id in self._active_sessions:
-            logger.info(
-                f'Cancellation requested for active host_agent session: {session_id}'
-            )
             # TODO: Implement proper cancellation when ADK supports it
             self._active_sessions.discard(session_id)
         else:

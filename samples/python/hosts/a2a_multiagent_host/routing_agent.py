@@ -1,5 +1,6 @@
 # pylint: disable=logging-fstring-interpolation
 import asyncio
+import requests
 import json
 import logging
 import os
@@ -28,7 +29,10 @@ from remote_agent_connection import (
     RemoteAgentConnections,
     TaskUpdateCallback,
 )
+from rich.console import Console
+from rich.panel import Panel
 
+console = Console()
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -87,14 +91,17 @@ class RoutingAgent:
         self.remote_agent_connections: dict[str, RemoteAgentConnections] = {}
         self.cards: dict[str, AgentCard] = {}
         self.agents: str = ''
+        self.discover_agents_url = os.getenv('DISCOVER_AGENTS_URL', 'http://localhost:8080/discover/agents')
         print("INIT CALLED")
 
     async def _async_init_components(
-        self, remote_agent_addresses: list[str]
+        self, remote_agent_addresses: list[str], discover_agents_url: str
     ) -> None:
         """Asynchronous part of initialization."""
         # Use a single httpx.AsyncClient for all card resolutions for efficiency
         async with httpx.AsyncClient(timeout=30) as client:
+            response = requests.get(discover_agents_url)
+            remote_agent_addresses = [e.get('wellknown_endpoint')[0].replace("/.well-known/agent-card.json", "") for e in response.json()]
             for address in remote_agent_addresses:
                 card_resolver = A2ACardResolver(
                     client, address
@@ -103,7 +110,13 @@ class RoutingAgent:
                     card = (
                         await card_resolver.get_agent_card()
                     )  # get_agent_card is async
-
+                    console.print(Panel(
+                        'Agent Card',
+                        style='bold blue',
+                        border_style='blue',
+                        expand=False
+                    ))
+                    console.print_json(card.model_dump_json(exclude_none=True))
                     remote_connection = RemoteAgentConnections(
                         agent_card=card, agent_url=address
                     )
@@ -132,11 +145,12 @@ class RoutingAgent:
     async def create(
         cls,
         remote_agent_addresses: list[str],
+        discover_agents_url: str,
         task_callback: TaskUpdateCallback | None = None,
     ) -> 'RoutingAgent':
         """Create and asynchronously initialize an instance of the RoutingAgent."""
         instance = cls(task_callback)
-        await instance._async_init_components(remote_agent_addresses)
+        await instance._async_init_components(remote_agent_addresses, discover_agents_url)
         return instance
 
     def create_agent(self) -> Agent:
@@ -157,7 +171,6 @@ class RoutingAgent:
 
     def root_instruction(self, context: ReadonlyContext) -> str:
         """Generate the root instruction for the RoutingAgent."""
-        current_agent = self.check_active_agent(context)
         return f"""
         **Role:** You are an expert Routing Delegator. Your primary function is to accurately delegate user requests to the appropriate specialized remote agents.
 
@@ -174,7 +187,6 @@ class RoutingAgent:
         **Agent Roster:**
 
         * Available Agents: `{self.agents}`
-        * Currently Active Seller Agent: `{current_agent['active_agent']}`
                 """
 
     def check_active_agent(self, context: ReadonlyContext):
@@ -303,10 +315,6 @@ class RoutingAgent:
         send_response: SendMessageResponse = await client.send_message(
             message_request=message_request
         )
-        print(
-            'send_response',
-            send_response.model_dump_json(exclude_none=True, indent=2),
-        )
 
         if not isinstance(send_response.root, SendMessageSuccessResponse):
             logger.debug('received non-success response. Aborting get task ')
@@ -320,16 +328,37 @@ class RoutingAgent:
 
         return task
 
+    async def discover_agents(self):
+        """
+            Discover the available remote agents.
+
+            Returns:
+                The list of available remote agents.
+        """
+        response = requests.get(self.discover_agents_url)
+        return response.json()
+    
+    async def get_agent_card(self, well_known_endpoint: str):
+        """
+            Get the agent card from the well known endpoint.
+
+            Args:
+                well_known_endpoint: The well known endpoint of the remote agent.
+
+            Returns:
+                The agent card.
+        """
+        response = requests.get(well_known_endpoint)
+        return response.json()
+
 
 def _get_initialized_routing_agent_sync() -> Agent:
     """Synchronously creates and initializes the RoutingAgent."""
 
     async def _async_main() -> Agent:
         routing_agent_instance = await RoutingAgent.create(
-            remote_agent_addresses=[
-                os.getenv('AIR_AGENT_URL', 'http://localhost:8080/681b1ddff3ac9a39a3c8d1c0'),
-                # os.getenv('WEA_AGENT_URL', 'http://localhost:10001'),
-            ]
+            remote_agent_addresses=[],
+            discover_agents_url='http://localhost:8080/discover/agents',
         )
         return routing_agent_instance.create_agent()
 

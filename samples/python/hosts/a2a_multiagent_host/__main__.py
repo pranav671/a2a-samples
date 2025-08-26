@@ -23,10 +23,9 @@ from host_agent_executor import (
 from routing_agent import (
     root_agent,
 )
-from traceability_ext import TraceabilityExtension
 from fastapi import FastAPI, Request
 from starlette.responses import JSONResponse
-
+from rich import print
 
 load_dotenv()
 
@@ -95,12 +94,17 @@ def main(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
     async def receive_notification(request: Request):
         data = await request.json()
         if data.get('agentStatus') == 'completed':
+            print("[blue]Received notification for remote agent completion[/blue]")
             agent_executor.output = data.get('output')
         return JSONResponse({"status": "ok", "message": "Notification received"})
 
     api_app.mount('/a2a/', a2a_app.build())
 
-    uvicorn.run(api_app, host=host, port=8083)
+    a2a_logger = logging.getLogger('a2a.server.apps.A2AStarletteApplication')
+    a2a_logger.setLevel(logging.ERROR)
+    logging.getLogger("google_genai.types").setLevel(logging.ERROR)
+
+    uvicorn.run(api_app, host=host, port=8083, access_log=False)
     # uvicorn.run(a2a_app.build(), host=host, port=port)
 
 
