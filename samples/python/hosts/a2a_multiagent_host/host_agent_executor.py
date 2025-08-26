@@ -85,13 +85,19 @@ class HostAgentExecutor(AgentExecutor):
 
                     break
                 if event.get_function_responses():
-                    for response_obj in event.get_function_responses():
+                    for idx, response_obj in enumerate(event.get_function_responses()):
                         response = response_obj.model_dump()
                         if response.get('response', {}).get('result', {}).get('status', {}).get('state', '') == 'working':
                             print("[green]Remote Agent execution started[/green]")
                             print("[orange1]Waiting for Remote Agent to finish...[/orange1]")
                             while self.output is None:
                                 await asyncio.sleep(3)
+                            # Create new part object
+                            new_part = types.Part(text=json.dumps(self.output))
+
+                            # Replace at specific index (if you know the mapping)
+                            if idx < len(event.content.parts):
+                                event.content.parts[idx] = new_part
                             await task_updater.update_status(
                                 TaskState.completed, 
                                 message=task_updater.new_agent_message([DataPart(data=self.output)]),
