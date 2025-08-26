@@ -94,7 +94,6 @@ def main(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
     @api_app.post("/notifications")
     async def receive_notification(request: Request):
         data = await request.json()
-        print("NOTIFICATIONS", data)
         if data.get('agentStatus') == 'completed':
             agent_executor.output = data.get('output')
         return JSONResponse({"status": "ok", "message": "Notification received"})

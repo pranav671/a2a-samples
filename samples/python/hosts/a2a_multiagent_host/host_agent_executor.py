@@ -91,11 +91,10 @@ class HostAgentExecutor(AgentExecutor):
                 if event.get_function_responses():
                     for response_obj in event.get_function_responses():
                         response = response_obj.model_dump()
-                        print("RESPONSE IN HOST AGENT EXECUTOR", response)
                         if response.get('response', {}).get('result', {}).get('status', {}).get('state', '') == 'working':
+                            print("Waiting for Agent to finish...")
                             while self.output is None:
                                 await asyncio.sleep(5)
-                                print("slept for 5 sec", self.output)
                             await task_updater.update_status(
                                 TaskState.completed, 
                                 message=task_updater.new_agent_message([DataPart(data=self.output)]),

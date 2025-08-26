@@ -303,7 +303,7 @@ class RoutingAgent:
         send_response: SendMessageResponse = await client.send_message(
             message_request=message_request
         )
-        logger.debug(
+        print(
             'send_response',
             send_response.model_dump_json(exclude_none=True, indent=2),
         )

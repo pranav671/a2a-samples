@@ -57,7 +57,7 @@ def format_stream_event(event: dict) -> str:
         texts = [p.get("text") for p in parts if p.get("kind") == "text" and p.get("text")]
         text_str = " | ".join(texts) if texts else "No text provided"
         console.print(f"Artifact update")
-        print(f"[bold blue]{text_str}[/bold blue]")
+        console.print(f"[bold yellow]{text_str}[/bold yellow]", markup=True)
 
     else:
         console.print(f"Unknown event type '{kind}' for Task {task_id}")
@@ -188,22 +188,6 @@ async def completeTask(
         task_id=task_id,
         context_id=context_id,
     )
-
-    console.print('\n[bold]File Attachment[/bold]', style='blue')
-    console.print('[dim](Press enter to skip file attachment)[/dim]')
-    file_path = click.prompt('File path', default='', show_default=False)
-    if file_path and file_path.strip() != '':
-        with open(file_path, 'rb') as f:
-            file_content = base64.b64encode(f.read()).decode('utf-8')
-            file_name = os.path.basename(file_path)
-
-        message.parts.append(
-            Part(
-                root=FilePart(
-                    file=FileWithBytes(name=file_name, bytes=file_content)
-                )
-            )
-        )
 
     payload = MessageSendParams(
         id=str(uuid4()),
